@@ -1,39 +1,83 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/main.js" defer></script>
-  </head>
+	<head>
+		<meta charset="UTF-8" />
+		<link rel="stylesheet" href="styles.css" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Tetris Prototype</title>
+		<script type="module" src="/main.js" defer></script>
+	</head>
 
-  <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
+	<body>
+		<main class="app-shell">
+			<section class="hero">
+				<p class="eyebrow">Prototipo educativo</p>
+				<h1>Tetris</h1>
+				<p class="intro">
+					Un prototipo funcional en HTML, CSS y JavaScript puro con controles de
+					teclado, puntuación, nivel y reinicio.
+				</p>
+			</section>
 
-      <div class="row">
-        <a href="https://tauri.app" target="_blank">
-          <img src="/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-        <a
-          href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-          target="_blank"
-        >
-          <img
-            src="/assets/javascript.svg"
-            class="logo vanilla"
-            alt="JavaScript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
+			<section class="game-layout" aria-label="Juego de Tetris">
+				<div class="board-panel">
+					<canvas
+						id="board"
+						width="300"
+						height="600"
+						aria-label="Tablero del juego"></canvas>
+					<div class="status-bar">
+						<span id="status">Listo para jugar</span>
+						<button id="restartBtn" type="button">Reiniciar</button>
+					</div>
+				</div>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
-  </body>
+				<aside class="side-panel">
+					<div class="card stats-card">
+						<h2>Estado</h2>
+						<div class="stats-grid">
+							<div>
+								<span>Puntuación</span>
+								<strong id="score">0</strong>
+							</div>
+							<div>
+								<span>Líneas</span>
+								<strong id="lines">0</strong>
+							</div>
+							<div>
+								<span>Nivel</span>
+								<strong id="level">1</strong>
+							</div>
+							<div>
+								<span>Mejor</span>
+								<strong id="highScore">0</strong>
+							</div>
+						</div>
+					</div>
+
+					<div class="card preview-card">
+						<h2>Siguiente</h2>
+						<canvas
+							id="next"
+							width="120"
+							height="120"
+							aria-label="Vista previa de la siguiente pieza"></canvas>
+					</div>
+
+					<div class="card controls-card">
+						<h2>Controles</h2>
+						<ul>
+							<li>Flechas: mover y bajar</li>
+							<li>Arriba / X: rotar</li>
+							<li>Espacio: caída instantánea</li>
+							<li>P: pausar</li>
+							<li>R: reiniciar</li>
+						</ul>
+					</div>
+				</aside>
+			</section>
+		</main>
+
+		<script src="script.js"></script>
+	</body>
 </html>
