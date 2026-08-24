@@ -1,7 +1,22 @@
-# Tauri + Vanilla
+# Tetris trainer
 
 This template should help get you started developing with Tauri in vanilla HTML, CSS and Javascript.
 
-## Recommended IDE Setup
+## Como ejecutar
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+Para correr la aplicación, primero asegúrate de tener instalado [Node.js](https://nodejs.org/) y [Rust](https://www.rust-lang.org/tools/install).
+Una vez que tengas ambos instalados, puedes seguir estos pasos:
+
+1. Clona este repositorio en tu máquina local.
+2. Abre una terminal y navega hasta el directorio del proyecto.
+3. Instala las dependencias del proyecto ejecutando el siguiente comando:
+
+   ```bash
+   npm install
+   ```
+
+4. Una vez que las dependencias estén instaladas, puedes iniciar la aplicación en modo de desarrollo ejecutando:
+
+   ```bash
+    npm run tauri dev
+   ```
