@@ -81,6 +81,8 @@ const PIECES = {
 };
 
 const lineScores = [0, 100, 300, 500, 800];
+const types = Object.keys(PIECES);
+let tetrisBag = [...types];
 let board = createBoard();
 let currentPiece = null;
 let nextPiece = null;
@@ -109,7 +111,7 @@ function rotateMatrix(matrix) {
   );
 }
 
-function createPiece(type = randomType()) {
+function createPiece(type = bagGenerator()) {
   const base = PIECES[type];
   return {
     type,
@@ -122,9 +124,17 @@ function createPiece(type = randomType()) {
 
 // Modificar para que utilize BAG de fichas disponibles y ahi selecciona le random en lugar de random total
 
-function randomType() {
-  const types = Object.keys(PIECES);
-  return types[Math.floor(Math.random() * types.length)];
+function bagGenerator() {
+  if (tetrisBag.length === 0) {
+    tetrisBag = [...types];
+  }
+  for (let i = tetrisBag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [tetrisBag[i], tetrisBag[j]] = [tetrisBag[j], tetrisBag[i]];
+  }
+
+  console.log(tetrisBag);
+  return tetrisBag.pop();
 }
 
 function collides(piece, offsetX = 0, offsetY = 0, testShape = piece.shape) {
@@ -410,6 +420,7 @@ function resetGame() {
   level = 1;
   paused = false;
   gameOver = false;
+  tetrisBag = [];
   nextPiece = createPiece();
   spawnPiece();
   updateHud();
