@@ -1,530 +1,519 @@
-const COLS = 10;
-const ROWS = 20;
-const BLOCK_SIZE = 30;
-const BOARD_WIDTH = COLS * BLOCK_SIZE;
-const BOARD_HEIGHT = ROWS * BLOCK_SIZE;
-const BASE_DROP_INTERVAL = 800;
-const MIN_DROP_INTERVAL = 120;
-
-const boardCanvas = document.getElementById("board");
-const boardContext = boardCanvas.getContext("2d");
-const nextCanvas = document.getElementById("next");
-const nextContext = nextCanvas.getContext("2d");
-
-const scoreElement = document.getElementById("score");
-const linesElement = document.getElementById("lines");
-const levelElement = document.getElementById("level");
-const highScoreElement = document.getElementById("highScore");
-const statusElement = document.getElementById("status");
-const restartButton = document.getElementById("restartBtn");
-
-boardCanvas.width = BOARD_WIDTH;
-boardCanvas.height = BOARD_HEIGHT;
-
-const PIECES = {
-  I: {
-    color: "#55e1ff",
-    shape: [
-      [0, 0, 0, 0],
-      [1, 1, 1, 1],
-      [0, 0, 0, 0],
-      [0, 0, 0, 0],
-    ],
-  },
-  O: {
-    color: "#ffe76a",
-    shape: [
-      [1, 1],
-      [1, 1],
-    ],
-  },
-  T: {
-    color: "#c68bff",
-    shape: [
-      [0, 1, 0],
-      [1, 1, 1],
-      [0, 0, 0],
-    ],
-  },
-  S: {
-    color: "#75f0a3",
-    shape: [
-      [0, 1, 1],
-      [1, 1, 0],
-      [0, 0, 0],
-    ],
-  },
-  Z: {
-    color: "#ff7d8a",
-    shape: [
-      [1, 1, 0],
-      [0, 1, 1],
-      [0, 0, 0],
-    ],
-  },
-  J: {
-    color: "#76a9ff",
-    shape: [
-      [1, 0, 0],
-      [1, 1, 1],
-      [0, 0, 0],
-    ],
-  },
-  L: {
-    color: "#ffb26d",
-    shape: [
-      [0, 0, 1],
-      [1, 1, 1],
-      [0, 0, 0],
-    ],
-  },
+const CONFIG = {
+	columns: 10,
+	rows: 20,
+	blockSize: 30,
+	baseDropInterval: 800,
+	minDropInterval: 120,
+	lineScores: [0, 100, 300, 500, 800],
 };
 
-const lineScores = [0, 100, 300, 500, 800];
-const types = Object.keys(PIECES);
-let tetrisBag = [...types];
-let board = createBoard();
-let currentPiece = null;
-let nextPiece = null;
-let score = 0;
-let lines = 0;
-let level = 1;
-let highScore = Number(localStorage.getItem("tetris-high-score") || 0);
-let paused = false;
-let gameOver = false;
-let lastTime = 0;
-let dropAccumulator = 0;
+const PIECE_DEFINITIONS = {
+	I: {
+		color: '#55e1ff',
+		shape: [
+			[0, 0, 0, 0],
+			[1, 1, 1, 1],
+			[0, 0, 0, 0],
+			[0, 0, 0, 0],
+		],
+	},
+	O: {
+		color: '#ffe76a',
+		shape: [
+			[1, 1],
+			[1, 1],
+		],
+	},
+	T: {
+		color: '#c68bff',
+		shape: [
+			[0, 1, 0],
+			[1, 1, 1],
+			[0, 0, 0],
+		],
+	},
+	S: {
+		color: '#75f0a3',
+		shape: [
+			[0, 1, 1],
+			[1, 1, 0],
+			[0, 0, 0],
+		],
+	},
+	Z: {
+		color: '#ff7d8a',
+		shape: [
+			[1, 1, 0],
+			[0, 1, 1],
+			[0, 0, 0],
+		],
+	},
+	J: {
+		color: '#76a9ff',
+		shape: [
+			[1, 0, 0],
+			[1, 1, 1],
+			[0, 0, 0],
+		],
+	},
+	L: {
+		color: '#ffb26d',
+		shape: [
+			[0, 0, 1],
+			[1, 1, 1],
+			[0, 0, 0],
+		],
+	},
+};
 
-highScoreElement.textContent = String(highScore);
+class Matrix {
+	static clone(matrix) {
+		return matrix.map((row) => row.slice());
+	}
 
-function createBoard() {
-  return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+	static rotate(matrix) {
+		return matrix[0].map((_, columnIndex) =>
+			matrix.map((row) => row[columnIndex]).reverse(),
+		);
+	}
 }
 
-function cloneMatrix(matrix) {
-  return matrix.map((row) => row.slice());
+class PieceBag {
+	constructor(types) {
+		this.types = types;
+		this.available = [];
+	}
+
+	next() {
+		if (this.available.length === 0) this.available = [...this.types];
+		for (let index = this.available.length - 1; index > 0; index -= 1) {
+			const randomIndex = Math.floor(Math.random() * (index + 1));
+			[this.available[index], this.available[randomIndex]] = [
+				this.available[randomIndex],
+				this.available[index],
+			];
+		}
+		return this.available.pop();
+	}
+
+	reset() {
+		this.available = [];
+	}
 }
 
-function rotateMatrix(matrix) {
-  return matrix[0].map((_, columnIndex) =>
-    matrix.map((row) => row[columnIndex]).reverse(),
-  );
+class PieceFactory {
+	constructor(definitions, bag, columns) {
+		this.definitions = definitions;
+		this.bag = bag;
+		this.columns = columns;
+	}
+
+	create(type = this.bag.next()) {
+		const definition = this.definitions[type];
+		return {
+			type,
+			color: definition.color,
+			shape: Matrix.clone(definition.shape),
+			x: Math.floor((this.columns - definition.shape[0].length) / 2),
+			y: 0,
+		};
+	}
 }
 
-function createPiece(type = bagGenerator()) {
-  const base = PIECES[type];
-  return {
-    type,
-    color: base.color,
-    shape: cloneMatrix(base.shape),
-    x: Math.floor((COLS - base.shape[0].length) / 2),
-    y: 0,
-  };
+class Board {
+	constructor(columns, rows) {
+		this.columns = columns;
+		this.rows = rows;
+		this.reset();
+	}
+
+	reset() {
+		this.cells = Array.from({ length: this.rows }, () =>
+			Array(this.columns).fill(null),
+		);
+	}
+
+	collides(piece, offsetX = 0, offsetY = 0, shape = piece.shape) {
+		for (let rowIndex = 0; rowIndex < shape.length; rowIndex += 1) {
+			for (
+				let columnIndex = 0;
+				columnIndex < shape[rowIndex].length;
+				columnIndex += 1
+			) {
+				if (!shape[rowIndex][columnIndex]) continue;
+				const boardX = piece.x + columnIndex + offsetX;
+				const boardY = piece.y + rowIndex + offsetY;
+				if (boardX < 0 || boardX >= this.columns || boardY >= this.rows)
+					return true;
+				if (boardY >= 0 && this.cells[boardY][boardX]) return true;
+			}
+		}
+		return false;
+	}
+
+	place(piece) {
+		piece.shape.forEach((row, rowIndex) => {
+			row.forEach((cell, columnIndex) => {
+				if (cell && piece.y + rowIndex >= 0) {
+					this.cells[piece.y + rowIndex][piece.x + columnIndex] = piece.color;
+				}
+			});
+		});
+	}
+
+	clearCompletedLines() {
+		let cleared = 0;
+		for (let rowIndex = this.rows - 1; rowIndex >= 0; rowIndex -= 1) {
+			if (this.cells[rowIndex].every(Boolean)) {
+				this.cells.splice(rowIndex, 1);
+				this.cells.unshift(Array(this.columns).fill(null));
+				cleared += 1;
+				rowIndex += 1;
+			}
+		}
+		return cleared;
+	}
 }
 
-// Modificar para que utilize BAG de fichas disponibles y ahi selecciona le random en lugar de random total
+class GameState {
+	constructor() {
+		this.highScore = Number(localStorage.getItem('tetris-high-score') || 0);
+		this.reset();
+	}
 
-function bagGenerator() {
-  if (tetrisBag.length === 0) {
-    tetrisBag = [...types];
-  }
-  for (let i = tetrisBag.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [tetrisBag[i], tetrisBag[j]] = [tetrisBag[j], tetrisBag[i]];
-  }
+	reset() {
+		this.score = 0;
+		this.lines = 0;
+		this.level = 1;
+		this.paused = false;
+		this.gameOver = false;
+	}
 
-  console.log(tetrisBag);
-  return tetrisBag.pop();
+	addScore(points) {
+		this.score += points;
+		if (this.score > this.highScore) {
+			this.highScore = this.score;
+			localStorage.setItem('tetris-high-score', String(this.highScore));
+		}
+	}
+
+	addLines(cleared) {
+		if (cleared === 0) return;
+		this.lines += cleared;
+		this.addScore(CONFIG.lineScores[cleared] * this.level);
+		this.level = Math.floor(this.lines / 10) + 1;
+	}
+
+	getDropInterval() {
+		return Math.max(
+			CONFIG.minDropInterval,
+			CONFIG.baseDropInterval - (this.level - 1) * 60,
+		);
+	}
 }
 
-function collides(piece, offsetX = 0, offsetY = 0, testShape = piece.shape) {
-  for (let rowIndex = 0; rowIndex < testShape.length; rowIndex += 1) {
-    for (
-      let columnIndex = 0;
-      columnIndex < testShape[rowIndex].length;
-      columnIndex += 1
-    ) {
-      if (!testShape[rowIndex][columnIndex]) {
-        continue;
-      }
+class Renderer {
+	constructor(boardCanvas, nextCanvas, board, state) {
+		this.boardCanvas = boardCanvas;
+		this.boardContext = boardCanvas.getContext('2d');
+		this.nextCanvas = nextCanvas;
+		this.nextContext = nextCanvas.getContext('2d');
+		this.board = board;
+		this.state = state;
+		boardCanvas.width = CONFIG.columns * CONFIG.blockSize;
+		boardCanvas.height = CONFIG.rows * CONFIG.blockSize;
+	}
 
-      const boardX = piece.x + columnIndex + offsetX;
-      const boardY = piece.y + rowIndex + offsetY;
+	drawCell(context, x, y, color, cellSize = CONFIG.blockSize) {
+		const pixelX = x * cellSize;
+		const pixelY = y * cellSize;
+		context.fillStyle = color;
+		context.fillRect(pixelX + 1, pixelY + 1, cellSize - 2, cellSize - 2);
+		context.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+		context.strokeRect(pixelX + 1, pixelY + 1, cellSize - 2, cellSize - 2);
+	}
 
-      if (boardX < 0 || boardX >= COLS || boardY >= ROWS) {
-        return true;
-      }
+	drawPiece(context, piece, color, forcedY = piece.y) {
+		piece.shape.forEach((row, rowIndex) => {
+			row.forEach((cell, columnIndex) => {
+				const boardY = forcedY + rowIndex;
+				if (cell && boardY >= 0)
+					this.drawCell(context, piece.x + columnIndex, boardY, color);
+			});
+		});
+	}
 
-      if (boardY >= 0 && board[boardY][boardX]) {
-        return true;
-      }
-    }
-  }
+	drawOverlay(message) {
+		const context = this.boardContext;
+		context.save();
+		context.fillStyle = 'rgba(3, 7, 16, 0.62)';
+		context.fillRect(0, 0, this.boardCanvas.width, this.boardCanvas.height);
+		context.fillStyle = '#e9f4ff';
+		context.font = 'bold 30px Trebuchet MS, sans-serif';
+		context.textAlign = 'center';
+		context.fillText(
+			message,
+			this.boardCanvas.width / 2,
+			this.boardCanvas.height / 2,
+		);
+		context.restore();
+	}
 
-  return false;
+	drawBoard(currentPiece) {
+		const context = this.boardContext;
+		context.clearRect(0, 0, this.boardCanvas.width, this.boardCanvas.height);
+		context.fillStyle = '#07111f';
+		context.fillRect(0, 0, this.boardCanvas.width, this.boardCanvas.height);
+		for (let y = 0; y < this.board.rows; y += 1) {
+			for (let x = 0; x < this.board.columns; x += 1) {
+				if (this.board.cells[y][x])
+					this.drawCell(context, x, y, this.board.cells[y][x]);
+				else {
+					context.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+					context.strokeRect(
+						x * CONFIG.blockSize + 0.5,
+						y * CONFIG.blockSize + 0.5,
+						CONFIG.blockSize,
+						CONFIG.blockSize,
+					);
+				}
+			}
+		}
+		if (currentPiece) {
+			let ghostY = currentPiece.y;
+			while (!this.board.collides(currentPiece, 0, ghostY - currentPiece.y + 1))
+				ghostY += 1;
+			this.drawPiece(context, currentPiece, 'rgba(255,255,255,0.18)', ghostY);
+			this.drawPiece(context, currentPiece, currentPiece.color);
+		}
+		if (this.state.paused && !this.state.gameOver) this.drawOverlay('Pausa');
+		else if (this.state.gameOver) this.drawOverlay('Game Over');
+	}
+
+	drawNextPiece(piece) {
+		const context = this.nextContext;
+		context.clearRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
+		context.fillStyle = '#07111f';
+		context.fillRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
+		if (!piece) return;
+		const offsetX = Math.floor((4 - piece.shape[0].length) / 2);
+		const offsetY = Math.floor((4 - piece.shape.length) / 2);
+		piece.shape.forEach((row, rowIndex) =>
+			row.forEach((cell, columnIndex) => {
+				if (cell)
+					this.drawCell(
+						context,
+						offsetX + columnIndex,
+						offsetY + rowIndex,
+						piece.color,
+					);
+			}),
+		);
+	}
 }
 
-function placePiece(piece) {
-  piece.shape.forEach((row, rowIndex) => {
-    row.forEach((cell, columnIndex) => {
-      if (!cell) {
-        return;
-      }
+class Hud {
+	constructor(elements, state) {
+		this.elements = elements;
+		this.state = state;
+	}
 
-      const boardY = piece.y + rowIndex;
-      const boardX = piece.x + columnIndex;
+	update() {
+		this.elements.score.textContent = String(this.state.score);
+		this.elements.lines.textContent = String(this.state.lines);
+		this.elements.level.textContent = String(this.state.level);
+		this.elements.highScore.textContent = String(this.state.highScore);
+	}
 
-      if (boardY >= 0) {
-        board[boardY][boardX] = piece.color;
-      }
-    });
-  });
+	setStatus(message) {
+		this.elements.status.textContent = message;
+	}
 }
 
-function clearLines() {
-  let cleared = 0;
+class InputController {
+	constructor(game, restartButton) {
+		this.game = game;
+		this.restartButton = restartButton;
+	}
 
-  for (let rowIndex = ROWS - 1; rowIndex >= 0; rowIndex -= 1) {
-    if (board[rowIndex].every(Boolean)) {
-      board.splice(rowIndex, 1);
-      board.unshift(Array(COLS).fill(null));
-      cleared += 1;
-      rowIndex += 1;
-    }
-  }
-
-  if (cleared > 0) {
-    lines += cleared;
-    score += lineScores[cleared] * level;
-    level = Math.floor(lines / 10) + 1;
-    updateHud();
-  }
+	bind() {
+		document.addEventListener('keydown', (event) => {
+			if (event.key === ' ') event.preventDefault();
+			this.game.handleKey(event.key.toLowerCase());
+		});
+		this.restartButton.addEventListener('click', () => this.game.reset());
+	}
 }
 
-function spawnPiece() {
-  currentPiece = nextPiece || createPiece();
-  nextPiece = createPiece();
+class TetrisGame {
+	constructor(elements) {
+		this.board = new Board(CONFIG.columns, CONFIG.rows);
+		this.state = new GameState();
+		this.bag = new PieceBag(Object.keys(PIECE_DEFINITIONS));
+		this.factory = new PieceFactory(
+			PIECE_DEFINITIONS,
+			this.bag,
+			CONFIG.columns,
+		);
+		this.renderer = new Renderer(
+			elements.board,
+			elements.next,
+			this.board,
+			this.state,
+		);
+		this.hud = new Hud(elements, this.state);
+		this.elements = elements;
+		this.currentPiece = null;
+		this.nextPiece = null;
+		this.lastTime = 0;
+		this.dropAccumulator = 0;
+	}
 
-  // No es necesario re declarar esto*
-  currentPiece.x = Math.floor((COLS - currentPiece.shape[0].length) / 2);
-  currentPiece.y = 0;
+	start() {
+		this.reset();
+		requestAnimationFrame((timestamp) => this.loop(timestamp));
+	}
 
-  if (collides(currentPiece)) {
-    gameOver = true;
-    paused = false;
-    statusElement.textContent = "Game over. Pulsa Reiniciar";
-  }
+	reset() {
+		this.board.reset();
+		this.bag.reset();
+		this.state.reset();
+		this.nextPiece = this.factory.create();
+		this.spawnPiece();
+		this.dropAccumulator = 0;
+		this.hud.update();
+		this.hud.setStatus('En juego');
+	}
+
+	spawnPiece() {
+		this.currentPiece = this.nextPiece || this.factory.create();
+		this.nextPiece = this.factory.create();
+		this.currentPiece.x = Math.floor(
+			(CONFIG.columns - this.currentPiece.shape[0].length) / 2,
+		);
+		this.currentPiece.y = 0;
+		if (this.board.collides(this.currentPiece)) {
+			this.state.gameOver = true;
+			this.state.paused = false;
+			this.hud.setStatus('Game over. Pulsa Reiniciar');
+		}
+	}
+
+	canPlay() {
+		return !this.state.gameOver && !this.state.paused;
+	}
+
+	move(offsetX, offsetY) {
+		if (
+			!this.canPlay() ||
+			this.board.collides(this.currentPiece, offsetX, offsetY)
+		)
+			return false;
+		this.currentPiece.x += offsetX;
+		this.currentPiece.y += offsetY;
+		return true;
+	}
+
+	rotate() {
+		if (!this.canPlay()) return;
+		const rotated = Matrix.rotate(this.currentPiece.shape);
+		for (const kick of [0, -1, 1, -2, 2]) {
+			if (!this.board.collides(this.currentPiece, kick, 0, rotated)) {
+				this.currentPiece.shape = rotated;
+				this.currentPiece.x += kick;
+				return;
+			}
+		}
+	}
+
+	hardDrop() {
+		if (!this.canPlay()) return;
+		while (this.move(0, 1)) this.state.addScore(2);
+		this.lockPiece();
+	}
+
+	lockPiece() {
+		this.board.place(this.currentPiece);
+		this.state.addLines(this.board.clearCompletedLines());
+		this.spawnPiece();
+		this.hud.update();
+	}
+
+	togglePause() {
+		if (this.state.gameOver) return;
+		this.state.paused = !this.state.paused;
+		this.hud.setStatus(this.state.paused ? 'Pausado' : 'En juego');
+	}
+
+	handleKey(key) {
+		if (key === 'p') return this.togglePause();
+		if (key === 'r') return this.reset();
+		if (!this.canPlay()) return;
+		switch (key) {
+			case 's':
+				this.move(-1, 0);
+				break;
+			case 'f':
+				this.move(1, 0);
+				break;
+			case 'd':
+				if (this.move(0, 1)) {
+					this.state.addScore(1);
+					this.hud.update();
+				}
+				break;
+			case 'l':
+			case 'arrowup':
+				this.rotate();
+				break;
+			case 'j':
+				this.rotate();
+				this.rotate();
+				break;
+			case 'k':
+				this.rotate();
+				this.rotate();
+				this.rotate();
+				break;
+			case 'c':
+				this.rotate();
+				this.rotate();
+				break;
+			case ' ':
+				this.hardDrop();
+				break;
+			default:
+				break;
+		}
+	}
+
+	loop(timestamp) {
+		const deltaTime = timestamp - this.lastTime;
+		this.lastTime = timestamp;
+		if (this.canPlay()) {
+			this.dropAccumulator += deltaTime;
+			if (this.dropAccumulator >= this.state.getDropInterval()) {
+				this.dropAccumulator = 0;
+				if (!this.move(0, 1)) this.lockPiece();
+			}
+		}
+		this.renderer.drawBoard(this.currentPiece);
+		this.renderer.drawNextPiece(this.nextPiece);
+		requestAnimationFrame((nextTimestamp) => this.loop(nextTimestamp));
+	}
 }
 
-function hardDrop() {
-  if (gameOver || paused) {
-    return;
-  }
+const elements = {
+	board: document.getElementById('board'),
+	next: document.getElementById('next'),
+	score: document.getElementById('score'),
+	lines: document.getElementById('lines'),
+	level: document.getElementById('level'),
+	highScore: document.getElementById('highScore'),
+	status: document.getElementById('status'),
+	restart: document.getElementById('restartBtn'),
+};
 
-  while (!collides(currentPiece, 0, 1)) {
-    currentPiece.y += 1;
-    score += 2;
-  }
-
-  lockPiece();
-}
-
-function lockPiece() {
-  placePiece(currentPiece);
-  clearLines();
-  updateHighScore();
-  spawnPiece();
-  updateHud();
-}
-
-function movePiece(offsetX, offsetY) {
-  if (gameOver || paused) {
-    return false;
-  }
-
-  if (!collides(currentPiece, offsetX, offsetY)) {
-    currentPiece.x += offsetX;
-    currentPiece.y += offsetY;
-    return true;
-  }
-
-  return false;
-}
-
-function rotatePiece() {
-  if (gameOver || paused) {
-    return;
-  }
-
-  // Arreglar kicks, sistema de kick muy basico, no re evalua posible posición sino que lockea
-  // Evaluar Y, actualmente se evalua solo X
-
-  const rotated = rotateMatrix(currentPiece.shape);
-  const kicks = [0, -1, 1, -2, 2];
-
-  for (const kick of kicks) {
-    if (!collides(currentPiece, kick, 0, rotated)) {
-      currentPiece.shape = rotated;
-      currentPiece.x += kick;
-      return;
-    }
-  }
-}
-
-function updateHighScore() {
-  if (score > highScore) {
-    highScore = score;
-    localStorage.setItem("tetris-high-score", String(highScore));
-    highScoreElement.textContent = String(highScore);
-  }
-}
-
-function updateHud() {
-  scoreElement.textContent = String(score);
-  linesElement.textContent = String(lines);
-  levelElement.textContent = String(level);
-  highScoreElement.textContent = String(highScore);
-}
-
-function getDropInterval() {
-  return Math.max(MIN_DROP_INTERVAL, BASE_DROP_INTERVAL - (level - 1) * 60);
-}
-
-function drawCell(context, x, y, color, cellSize) {
-  const pixelX = x * cellSize;
-  const pixelY = y * cellSize;
-
-  context.fillStyle = color;
-  context.fillRect(pixelX + 1, pixelY + 1, cellSize - 2, cellSize - 2);
-
-  context.strokeStyle = "rgba(255, 255, 255, 0.12)";
-  context.strokeRect(pixelX + 1, pixelY + 1, cellSize - 2, cellSize - 2);
-}
-
-function drawBoard() {
-  boardContext.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
-  boardContext.fillStyle = "#07111f";
-  boardContext.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
-
-  for (let y = 0; y < ROWS; y += 1) {
-    for (let x = 0; x < COLS; x += 1) {
-      if (board[y][x]) {
-        drawCell(boardContext, x, y, board[y][x], BLOCK_SIZE);
-      } else {
-        boardContext.strokeStyle = "rgba(255, 255, 255, 0.03)";
-        boardContext.strokeRect(
-          x * BLOCK_SIZE + 0.5,
-          y * BLOCK_SIZE + 0.5,
-          BLOCK_SIZE,
-          BLOCK_SIZE,
-        );
-      }
-    }
-  }
-
-  if (currentPiece) {
-    const ghostY = getGhostY();
-    drawPiece(boardContext, currentPiece, "rgba(255,255,255,0.18)", ghostY);
-    drawPiece(boardContext, currentPiece, currentPiece.color);
-  }
-
-  if (paused && !gameOver) {
-    overlayMessage("Pausa");
-  }
-
-  if (gameOver) {
-    overlayMessage("Game Over");
-  }
-}
-
-function drawPiece(context, piece, color, forcedY = piece.y) {
-  piece.shape.forEach((row, rowIndex) => {
-    row.forEach((cell, columnIndex) => {
-      if (!cell) {
-        return;
-      }
-
-      const boardX = piece.x + columnIndex;
-      const boardY = forcedY + rowIndex;
-
-      if (boardY >= 0) {
-        drawCell(context, boardX, boardY, color, BLOCK_SIZE);
-      }
-    });
-  });
-}
-
-function getGhostY() {
-  let ghostY = currentPiece.y;
-
-  while (!collides(currentPiece, 0, ghostY - currentPiece.y + 1)) {
-    ghostY += 1;
-  }
-
-  return ghostY;
-}
-
-function overlayMessage(message) {
-  boardContext.save();
-  boardContext.fillStyle = "rgba(3, 7, 16, 0.62)";
-  boardContext.fillRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
-  boardContext.fillStyle = "#e9f4ff";
-  boardContext.font = "bold 30px Trebuchet MS, sans-serif";
-  boardContext.textAlign = "center";
-  boardContext.fillText(message, BOARD_WIDTH / 2, BOARD_HEIGHT / 2);
-
-  // Averiguar porque tenemos ese restore y save
-  boardContext.restore();
-}
-
-function drawNextPiece() {
-  // Usar constante global
-  const previewSize = 30;
-  const previewWidth = nextCanvas.width;
-  const previewHeight = nextCanvas.height;
-  nextContext.clearRect(0, 0, previewWidth, previewHeight);
-  nextContext.fillStyle = "#07111f";
-  nextContext.fillRect(0, 0, previewWidth, previewHeight);
-
-  if (!nextPiece) {
-    return;
-  }
-
-  const shape = nextPiece.shape;
-
-  // Ideado solo para cuadrado, ajustar para el resto
-  const offsetX = Math.floor((4 - shape[0].length) / 2);
-  const offsetY = Math.floor((4 - shape.length) / 2);
-
-  shape.forEach((row, rowIndex) => {
-    row.forEach((cell, columnIndex) => {
-      if (!cell) {
-        return;
-      }
-
-      drawCell(
-        nextContext,
-        offsetX + columnIndex,
-        offsetY + rowIndex,
-        nextPiece.color,
-        previewSize,
-      );
-    });
-  });
-}
-
-function resetGame() {
-  board = createBoard();
-  score = 0;
-  lines = 0;
-  level = 1;
-  paused = false;
-  gameOver = false;
-  tetrisBag = [];
-  nextPiece = createPiece();
-  spawnPiece();
-  updateHud();
-  statusElement.textContent = "En juego";
-  drawNextPiece();
-}
-
-function togglePause() {
-  if (gameOver) {
-    return;
-  }
-
-  paused = !paused;
-  statusElement.textContent = paused ? "Pausado" : "En juego";
-}
-
-function gameLoop(timestamp = 0) {
-  const deltaTime = timestamp - lastTime;
-  lastTime = timestamp;
-
-  if (!paused && !gameOver) {
-    dropAccumulator += deltaTime;
-
-    if (dropAccumulator >= getDropInterval()) {
-      dropAccumulator = 0;
-
-      if (!movePiece(0, 1)) {
-        lockPiece();
-      }
-    }
-  }
-
-  drawBoard();
-  drawNextPiece();
-  requestAnimationFrame(gameLoop);
-}
-
-// Hacer que puedan oprimirse dos botones de juego simultaneamente
-
-document.addEventListener("keydown", (event) => {
-  const key = event.key.toLowerCase();
-
-  if (key === "p") {
-    togglePause();
-    return;
-  }
-
-  if (key === "r") {
-    resetGame();
-    return;
-  }
-
-  if (gameOver || paused) {
-    return;
-  }
-
-  switch (key) {
-    case "s":
-      movePiece(-1, 0);
-      break;
-    case "f":
-      movePiece(1, 0);
-      break;
-    case "d":
-      if (movePiece(0, 1)) {
-        score += 1;
-        updateHud();
-      }
-      break;
-    case "arrowup":
-    // esta girando solo con oprimir hacia arriba, averiguar porque
-    // if (movePiece(0, -2)) {
-    // 	score -= 1;
-    // 	updateHud();
-    // }
-    case "l":
-      rotatePiece();
-      break;
-    case "j":
-      rotatePiece();
-      rotatePiece();
-      break;
-    case "k":
-      rotatePiece();
-      rotatePiece();
-      rotatePiece();
-      break;
-    // Implementado rotar invertir 180*
-    // Ajustar por problema con matrices de fichas y posicionamiento en matriz
-    case "c":
-      rotatePiece();
-      rotatePiece();
-      break;
-
-    case " ":
-      event.preventDefault();
-      hardDrop();
-      break;
-    default:
-      break;
-  }
-});
-
-restartButton.addEventListener("click", resetGame);
-
-resetGame();
-requestAnimationFrame(gameLoop);
+const game = new TetrisGame(elements);
+new InputController(game, elements.restart).bind();
+game.start();
