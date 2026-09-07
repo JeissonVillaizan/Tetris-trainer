@@ -1,18 +1,7 @@
-const { invoke } = window.__TAURI__.core;
+import InputController from './core/InputController.js';
+import TetrisGame from './core/TetrisGame.js';
+import elements from './ui/DOMElements.js';
 
-let greetInputEl;
-let greetMsgEl;
-
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsgEl.textContent = await invoke("greet", { name: greetInputEl.value });
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    greet();
-  });
-});
+const game = new TetrisGame(elements);
+new InputController(game, elements.restart).bind();
+game.start();
